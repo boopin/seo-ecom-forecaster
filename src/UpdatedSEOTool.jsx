@@ -27,7 +27,7 @@ function UpdatedSEOTool() {
       currency: "GBP (£)",
       conversionRate: 3.0,
       investment: 5000,
-      valuePerConversion: 250
+      averageOrderValue: 250 // Renamed from valuePerConversion
     };
   });
   const [projections, setProjections] = useState([]);
@@ -191,7 +191,7 @@ function UpdatedSEOTool() {
   const calculateForecast = () => {
     try {
       setLoading(true); // Start loading
-      const { conversionRate, projectionPeriod, valuePerConversion, investment } = settings;
+      const { conversionRate, projectionPeriod, averageOrderValue, investment } = settings; // Renamed from valuePerConversion
       console.log("Settings:", settings); // Debug log
       console.log("Keywords:", keywords); // Debug log
 
@@ -219,7 +219,7 @@ function UpdatedSEOTool() {
           const seasonality = getSeasonalityMultiplier(month, settings.category);
           const traffic = searchVolume * ctr * seasonality;
           const conversions = traffic * (conversionRate / 100);
-          const revenue = conversions * valuePerConversion;
+          const revenue = conversions * averageOrderValue; // Renamed from valuePerConversion
 
           monthlyTraffic += traffic;
           monthlyConversions += conversions;
@@ -346,8 +346,8 @@ function UpdatedSEOTool() {
             <input type="number" min="0" max="100" className="w-full border p-2 rounded" value={settings.conversionRate} onChange={(e) => setSettings({ ...settings, conversionRate: parseFloat(e.target.value) || 3.0 })} />
           </div>
           <div>
-            <label className="block text-sm mb-1">Value per Conversion</label>
-            <input type="number" min="0" className="w-full border p-2 rounded" value={settings.valuePerConversion} onChange={(e) => setSettings({ ...settings, valuePerConversion: parseInt(e.target.value) || 250 })} />
+            <label className="block text-sm mb-1">Average Order Value</label>
+            <input type="number" min="0" className="w-full border p-2 rounded" value={settings.averageOrderValue} onChange={(e) => setSettings({ ...settings, averageOrderValue: parseInt(e.target.value) || 250 })} />
           </div>
           <div>
             <label className="block text-sm mb-1">SEO Investment</label>
