@@ -33,6 +33,7 @@ function UpdatedSEOTool() {
   const [projections, setProjections] = useState([]);
   const [fileError, setFileError] = useState("");
   const [validationError, setValidationError] = useState("");
+  const [loading, setLoading] = useState(false); // Added loading state
 
   useEffect(() => {
     localStorage.setItem('seoSettings', JSON.stringify(settings));
@@ -106,7 +107,7 @@ function UpdatedSEOTool() {
     }
   };
 
-  // Download sample CSV (unchanged)
+  // Download sample CSV
   const downloadSampleCSV = () => {
     const sample = "keyword,searchVolume,position,targetPosition\n" +
                   "gas bbq,8000,8,3\n" +
@@ -121,7 +122,7 @@ function UpdatedSEOTool() {
     URL.revokeObjectURL(url);
   };
 
-  // Add a new keyword with validation (unchanged)
+  // Add a new keyword with validation
   const addKeyword = () => {
     const volume = parseInt(newVolume) || 0;
     const position = parseInt(newPosition) || 20;
@@ -170,13 +171,13 @@ function UpdatedSEOTool() {
     setKeywords(keywords.filter((_, i) => i !== index));
   };
 
-  // CTR Model (unchanged)
+  // CTR Model
   const getCTR = (position) => {
     const ctrTable = { 1: 0.317, 2: 0.247, 3: 0.187, 4: 0.133, 5: 0.095, 6: 0.068, 7: 0.049, 8: 0.035, 9: 0.025, 10: 0.018 };
     return position <= 10 ? ctrTable[Math.round(position)] : 0.01;
   };
 
-  // Seasonality Data for Categories (unchanged)
+  // Seasonality Data for Categories
   const getSeasonalityMultiplier = (month, category) => {
     const seasonality = {
       "BBQ & Outdoor Cooking": { 1: 0.8, 2: 0.9, 3: 1.0, 4: 1.1, 5: 1.2, 6: 1.3, 7: 1.3, 8: 1.2, 9: 1.1, 10: 1.0, 11: 0.9, 12: 0.8 },
@@ -186,52 +187,70 @@ function UpdatedSEOTool() {
     return seasonality[category]?.[month] || 1.0;
   };
 
-  // Forecast Algorithm (unchanged)
+  // Forecast Algorithm with Error Handling and Loading State
   const calculateForecast = () => {
-    const { conversionRate, projectionPeriod, valuePerConversion, investment } = settings;
-    if (projectionPeriod < 1 || projectionPeriod > 12) {
-      setValidationError("Projection period must be between 1 and 12 months.");
-      return;
+    try {
+      setLoading(true); // Start loading
+      const { conversionRate, projectionPeriod, valuePerConversion, investment } = settings;
+      console.log("Settings:", settings); // Debug log
+      console.log("Keywords:", keywords); // Debug log
+
+      if (!projectionPeriod || projectionPeriod < 1 || projectionPeriod > 12) {
+        setValidationError("Projection period must be between 1 and 12 months.");
+        setLoading(false);
+        return;
+      }
+
+      const projections = [];
+      let totalTraffic = 0, totalConversions = 0, totalRevenue = 0;
+
+      for (let month = 1; month <= projectionPeriod; month++) {
+        let monthlyTraffic = 0, monthlyConversions = 0, monthlyRevenue = 0;
+
+        keywords.forEach(keyword => {
+          const { searchVolume, position, targetPosition } = keyword;
+          if (!searchVolume || !position || !targetPosition) {
+            throw new Error(`Invalid keyword data: ${JSON.stringify(keyword)}`);
+          }
+
+          const positionDelta = (position - targetPosition) / projectionPeriod;
+          const currentMonthPosition = Math.max(targetPosition, position - positionDelta * (month - 1));
+          const ctr = getCTR(currentMonthPosition);
+          const seasonality = getSeasonalityMultiplier(month, settings.category);
+          const traffic = searchVolume * ctr * seasonality;
+          const conversions = traffic * (conversionRate / 100);
+          const revenue = conversions * valuePerConversion;
+
+          monthlyTraffic += traffic;
+          monthlyConversions += conversions;
+          monthlyRevenue += revenue;
+        });
+
+        totalTraffic += monthlyTraffic;
+        totalConversions += monthlyConversions;
+        totalRevenue += monthlyRevenue;
+
+        projections.push({
+          month: new Date(2025, month - 1).toLocaleString('default', { month: 'short' }),
+          traffic: Math.round(monthlyTraffic),
+          conversions: Math.round(monthlyConversions),
+          revenue: monthlyRevenue.toFixed(2),
+          roi: (((totalRevenue - investment) / investment) * 100).toFixed(1)
+        });
+      }
+
+      console.log("Projections:", projections); // Debug log
+      setProjections(projections);
+      setValidationError("");
+    } catch (error) {
+      console.error("Error in calculateForecast:", error);
+      setValidationError("An error occurred while calculating the forecast. Check the console for details.");
+    } finally {
+      setLoading(false); // End loading
     }
-    const projections = [];
-    let totalTraffic = 0, totalConversions = 0, totalRevenue = 0;
-
-    for (let month = 1; month <= projectionPeriod; month++) {
-      let monthlyTraffic = 0, monthlyConversions = 0, monthlyRevenue = 0;
-
-      keywords.forEach(keyword => {
-        const { searchVolume, position, targetPosition } = keyword;
-        const positionDelta = (position - targetPosition) / projectionPeriod;
-        const currentMonthPosition = Math.max(targetPosition, position - positionDelta * (month - 1));
-        const ctr = getCTR(currentMonthPosition);
-        const seasonality = getSeasonalityMultiplier(month, settings.category);
-        const traffic = searchVolume * ctr * seasonality;
-        const conversions = traffic * (conversionRate / 100);
-        const revenue = conversions * valuePerConversion;
-
-        monthlyTraffic += traffic;
-        monthlyConversions += conversions;
-        monthlyRevenue += revenue;
-      });
-
-      totalTraffic += monthlyTraffic;
-      totalConversions += monthlyConversions;
-      totalRevenue += monthlyRevenue;
-
-      projections.push({
-        month: new Date(2025, month - 1).toLocaleString('default', { month: 'short' }),
-        traffic: Math.round(monthlyTraffic),
-        conversions: Math.round(monthlyConversions),
-        revenue: monthlyRevenue.toFixed(2),
-        roi: (((totalRevenue - investment) / investment) * 100).toFixed(1)
-      });
-    }
-
-    setProjections(projections);
-    setValidationError("");
   };
 
-  // Export Projections as CSV (unchanged)
+  // Export Projections as CSV
   const downloadProjectionsCSV = () => {
     const headers = "Month,Traffic,Conversions,Revenue,ROI\n";
     const rows = projections.map(p => `${p.month},${p.traffic},${p.conversions},${p.revenue},${p.roi}`).join('\n');
@@ -245,7 +264,7 @@ function UpdatedSEOTool() {
     URL.revokeObjectURL(url);
   };
 
-  // Chart Data (unchanged)
+  // Chart Data
   const chartData = {
     labels: projections.map(p => p.month),
     datasets: [
@@ -390,8 +409,12 @@ function UpdatedSEOTool() {
 
       {/* Calculate Forecast */}
       <div className="mb-4">
-        <button onClick={calculateForecast} className="bg-green-600 text-white py-2 px-4 rounded font-medium hover:bg-green-700">
-          Calculate Forecast
+        <button
+          onClick={calculateForecast}
+          className="bg-green-600 text-white py-2 px-4 rounded font-medium hover:bg-green-700 disabled:opacity-50"
+          disabled={loading}
+        >
+          {loading ? "Calculating..." : "Calculate Forecast"}
         </button>
       </div>
 
