@@ -1,4 +1,4 @@
-# SEO Tool App
+# SEO eCommerce Metrics Forecasting Tool
 
 A React-based SEO forecasting tool designed to help users upload keyword data (via CSV or Excel), manage keywords, and project traffic, conversions, revenue, and ROI based on SEO performance.
 
