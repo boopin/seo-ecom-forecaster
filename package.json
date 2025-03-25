@@ -1,5 +1,5 @@
 {
-  "name": "seo-tool-app",
+  "name": "seo-ecom-forecaster",
   "version": "1.0.0",
   "scripts": {
     "start": "react-scripts start",
@@ -13,5 +13,10 @@
     "xlsx": "^0.18.5",
     "chart.js": "^4.4.2",
     "react-chartjs-2": "^5.2.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.1",
+    "postcss": "^8.4.31",
+    "autoprefixer": "^10.4.16"
   }
 }
