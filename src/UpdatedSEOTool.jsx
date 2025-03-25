@@ -27,7 +27,7 @@ function UpdatedSEOTool() {
       currency: "GBP (£)",
       conversionRate: 3.0,
       investment: 5000,
-      averageOrderValue: 250 // Renamed from valuePerConversion
+      averageOrderValue: 250
     };
   });
   const [projections, setProjections] = useState([]);
@@ -171,10 +171,11 @@ function UpdatedSEOTool() {
     setKeywords(keywords.filter((_, i) => i !== index));
   };
 
-  // CTR Model
+  // CTR Model with consistent rounding using Math.ceil
   const getCTR = (position) => {
     const ctrTable = { 1: 0.317, 2: 0.247, 3: 0.187, 4: 0.133, 5: 0.095, 6: 0.068, 7: 0.049, 8: 0.035, 9: 0.025, 10: 0.018 };
-    return position <= 10 ? ctrTable[Math.round(position)] : 0.01;
+    const roundedPosition = Math.ceil(position); // Use Math.ceil for consistent rounding
+    return roundedPosition <= 10 ? ctrTable[roundedPosition] : 0.01;
   };
 
   // Seasonality Data for Categories
@@ -191,7 +192,7 @@ function UpdatedSEOTool() {
   const calculateForecast = () => {
     try {
       setLoading(true); // Start loading
-      const { conversionRate, projectionPeriod, averageOrderValue, investment } = settings; // Renamed from valuePerConversion
+      const { conversionRate, projectionPeriod, averageOrderValue, investment } = settings;
       console.log("Settings:", settings); // Debug log
       console.log("Keywords:", keywords); // Debug log
 
@@ -219,7 +220,7 @@ function UpdatedSEOTool() {
           const seasonality = getSeasonalityMultiplier(month, settings.category);
           const traffic = searchVolume * ctr * seasonality;
           const conversions = traffic * (conversionRate / 100);
-          const revenue = conversions * averageOrderValue; // Renamed from valuePerConversion
+          const revenue = conversions * averageOrderValue;
 
           monthlyTraffic += traffic;
           monthlyConversions += conversions;
