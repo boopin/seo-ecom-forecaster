@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
 import Papa from 'papaparse'; // For CSV parsing
 import * as XLSX from 'xlsx'; // For Excel parsing
 import { Line } from 'react-chartjs-2';
-import { Chart as ChartJS, LineElement, PointElement, LinearScale, Title, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend } from 'chart.js';
 
-// Register Chart.js components
-ChartJS.register(LineElement, PointElement, LinearScale, Title, Tooltip, Legend);
+// Register Chart.js components, including CategoryScale
+ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend);
 
 function UpdatedSEOTool() {
   const [hasUploaded, setHasUploaded] = useState(false);
@@ -33,7 +34,7 @@ function UpdatedSEOTool() {
   const [projections, setProjections] = useState([]);
   const [fileError, setFileError] = useState("");
   const [validationError, setValidationError] = useState("");
-  const [loading, setLoading] = useState(false); // Added loading state
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('seoSettings', JSON.stringify(settings));
