@@ -1,0 +1,17 @@
+{
+  "name": "seo-tool-app",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "^5.0.1",
+    "papaparse": "^5.4.1",
+    "xlsx": "^0.18.5",
+    "chart.js": "^4.4.2",
+    "react-chartjs-2": "^5.2.0"
+  }
+}
