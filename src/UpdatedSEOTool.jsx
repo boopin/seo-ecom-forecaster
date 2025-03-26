@@ -276,8 +276,14 @@ function UpdatedSEOTool() {
 
   return (
     <div className="p-4 bg-white rounded shadow">
-      <h1 className="text-xl font-bold mb-4">SEO Forecasting Tool</h1>
-      <p className="mb-4">Upload keywords (CSV or Excel) or manually enter them to forecast SEO impact.</p>
+      <div className="flex items-center mb-2">
+        <svg className="h-6 w-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2V9a2 2 0 00-2-2h-2a2 2 0 00-2 2v10" />
+        </svg>
+        <span className="text-sm text-blue-600">Powered by Boopin</span>
+      </div>
+      <h1 className="text-3xl font-bold mb-4">EcomSEO Predictor</h1>
+      <p className="mb-4 text-gray-600 italic">Forecast your e-commerce SEO performance with precision—predict traffic, conversions, and revenue growth.</p>
 
       {/* File Upload */}
       <div className="mb-6">
