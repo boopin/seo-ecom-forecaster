@@ -1,25 +1,68 @@
+// src/UpdatedSEOTool.tsx
+
 import React, { useState, useEffect } from 'react';
-import Papa from 'papaparse'; // For CSV parsing
-import * as XLSX from 'xlsx'; // For Excel parsing
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend } from 'chart.js';
+import SettingsForm from './components/SettingsForm';
+import KeywordsTable from './components/KeywordsTable';
+import ProjectionsTable from './components/ProjectionsTable';
+import WhatIfAnalysis from './components/WhatIfAnalysis';
+import { getCTR, getSeasonalityMultiplier, CTR_MODELS } from './utils/utils';
 
-// Register Chart.js components, including CategoryScale
+// Register Chart.js components
 ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Title, Tooltip, Legend);
 
-function UpdatedSEOTool() {
-  const [hasUploaded, setHasUploaded] = useState(false);
-  const [keywords, setKeywords] = useState([
-    { keyword: "gas bbq", searchVolume: 8000, position: 8, targetPosition: 3 },
-    { keyword: "charcoal bbq/orange bbq", searchVolume: 6500, position: 12, targetPosition: 5 },
-    { keyword: "bbq grill", searchVolume: 5000, position: 9, targetPosition: 4 }
+interface Keyword {
+  keyword: string;
+  searchVolume: number;
+  position: number;
+  targetPosition: number;
+  difficulty: number;
+}
+
+interface Settings {
+  category: string;
+  projectionPeriod: number;
+  currency: string;
+  conversionRate: number;
+  investment: number;
+  averageOrderValue: number;
+  ctrModel: string;
+}
+
+interface Projection {
+  month: string;
+  traffic: number;
+  conversions: number;
+  revenue: string;
+  roi: string;
+  trafficRange: [number, number];
+  conversionsRange: [number, number];
+  revenueRange: [number, number];
+  keywordBreakdown: Array<{
+    keyword: string;
+    traffic: number;
+    conversions: number;
+    revenue: number;
+  }>;
+}
+
+const UpdatedSEOTool: React.FC = () => {
+  const [hasUploaded, setHasUploaded] = useState<boolean>(false);
+  const [keywords, setKeywords] = useState<Keyword[]>([
+    { keyword: "gas bbq", searchVolume: 8000, position: 8, targetPosition: 3, difficulty: 50 },
+    { keyword: "charcoal bbq/orange bbq", searchVolume: 6500, position: 12, targetPosition: 5, difficulty: 60 },
+    { keyword: "bbq grill", searchVolume: 5000, position: 9, targetPosition: 4, difficulty: 55 }
   ]);
-  const [newKeyword, setNewKeyword] = useState("");
-  const [newVolume, setNewVolume] = useState("");
-  const [newPosition, setNewPosition] = useState("");
-  const [newTarget, setNewTarget] = useState("");
-  const [showNewKeywordForm, setShowNewKeywordForm] = useState(false);
-  const [settings, setSettings] = useState(() => {
+  const [newKeyword, setNewKeyword] = useState<string>("");
+  const [newVolume, setNewVolume] = useState<string>("");
+  const [newPosition, setNewPosition] = useState<string>("");
+  const [newTarget, setNewTarget] = useState<string>("");
+  const [newDifficulty, setNewDifficulty] = useState<string>("");
+  const [showNewKeywordForm, setShowNewKeywordForm] = useState<boolean>(false);
+  const [settings, setSettings] = useState<Settings>(() => {
     const saved = localStorage.getItem('seoSettings');
     return saved ? JSON.parse(saved) : {
       category: "BBQ & Outdoor Cooking",
@@ -27,36 +70,38 @@ function UpdatedSEOTool() {
       currency: "GBP (£)",
       conversionRate: 3.0,
       investment: 5000,
-      averageOrderValue: 250
+      averageOrderValue: 250,
+      ctrModel: "Default"
     };
   });
-  const [projections, setProjections] = useState([]);
-  const [fileError, setFileError] = useState("");
-  const [validationError, setValidationError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [customCTR, setCustomCTR] = useState<Record<number, number>>({});
+  const [projections, setProjections] = useState<Projection[]>([]);
+  const [fileError, setFileError] = useState<string>("");
+  const [validationError, setValidationError] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem('seoSettings', JSON.stringify(settings));
   }, [settings]);
 
-  // Handle file upload (CSV or Excel)
-  const handleUpload = (e) => {
-    const file = e.target.files[0];
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-    setFileError(""); // Reset error message
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    setFileError("");
 
     if (fileExtension === 'csv') {
       Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (result) => {
+        complete: (result: Papa.ParseResult<Keyword>) => {
           const parsed = result.data.map(row => ({
             keyword: row.keyword || "",
-            searchVolume: parseInt(row.searchVolume) || 0,
-            position: parseInt(row.position) || 20,
-            targetPosition: parseInt(row.targetPosition) || 10
+            searchVolume: parseInt(row.searchVolume as unknown as string) || 0,
+            position: parseInt(row.position as unknown as string) || 20,
+            targetPosition: parseInt(row.targetPosition as unknown as string) || 10,
+            difficulty: parseInt(row.difficulty as unknown as string) || 50
           }));
           if (parsed.every(row => row.keyword && row.searchVolume > 0)) {
             setKeywords(parsed);
@@ -71,27 +116,27 @@ function UpdatedSEOTool() {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
-          const data = new Uint8Array(event.target.result);
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array' });
           const sheet = workbook.Sheets[workbook.SheetNames[0]];
           const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-          // Assume first row is headers
-          const headers = jsonData[0].map(h => h.toLowerCase().trim());
-          const parsed = jsonData.slice(1).map(row => {
-            const rowObj = {};
-            headers.forEach((header, idx) => {
+          const headers = jsonData[0].map((h: string) => h.toLowerCase().trim());
+          const parsed = jsonData.slice(1).map((row: any[]) => {
+            const rowObj: Record<string, any> = {};
+            headers.forEach((header: string, idx: number) => {
               rowObj[header] = row[idx];
             });
             return {
               keyword: rowObj.keyword || "",
               searchVolume: parseInt(rowObj.searchvolume) || 0,
               position: parseInt(rowObj.position) || 20,
-              targetPosition: parseInt(rowObj.targetposition) || 10
+              targetPosition: parseInt(rowObj.targetposition) || 10,
+              difficulty: parseInt(rowObj.difficulty) || 50
             };
           });
 
-          if (parsed.every(row => row.keyword && row.searchVolume > 0)) {
+          if (parsed.every((row: Keyword) => row.keyword && row.searchVolume > 0)) {
             setKeywords(parsed);
             setHasUploaded(true);
           } else {
@@ -107,12 +152,11 @@ function UpdatedSEOTool() {
     }
   };
 
-  // Download sample CSV
   const downloadSampleCSV = () => {
-    const sample = "keyword,searchVolume,position,targetPosition\n" +
-                  "gas bbq,8000,8,3\n" +
-                  "charcoal bbq,6500,12,5\n" +
-                  "bbq grill,5000,9,4\n";
+    const sample = "keyword,searchVolume,position,targetPosition,difficulty\n" +
+                  "gas bbq,8000,8,3,50\n" +
+                  "charcoal bbq,6500,12,5,60\n" +
+                  "bbq grill,5000,9,4,55\n";
     const blob = new Blob([sample], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -122,101 +166,55 @@ function UpdatedSEOTool() {
     URL.revokeObjectURL(url);
   };
 
-  // Add a new keyword with validation
-  const addKeyword = () => {
-    const volume = parseInt(newVolume) || 0;
-    const position = parseInt(newPosition) || 20;
-    const targetPosition = parseInt(newTarget) || 10;
-
-    if (!newKeyword.trim()) {
-      setValidationError("Keyword cannot be empty.");
-      return;
-    }
-    if (volume <= 0) {
-      setValidationError("Search Volume must be positive.");
-      return;
-    }
-    if (position < 1 || position > 100 || targetPosition < 1 || targetPosition > 100) {
-      setValidationError("Positions must be between 1 and 100.");
-      return;
-    }
-
-    setKeywords([...keywords, { keyword: newKeyword, searchVolume: volume, position, targetPosition }]);
-    setValidationError("");
-    resetNewKeywordForm();
+  const resetToDefaults = () => {
+    setSettings({
+      category: "BBQ & Outdoor Cooking",
+      projectionPeriod: 6,
+      currency: "GBP (£)",
+      conversionRate: 3.0,
+      investment: 5000,
+      averageOrderValue: 250,
+      ctrModel: "Default"
+    });
+    setKeywords([
+      { keyword: "gas bbq", searchVolume: 8000, position: 8, targetPosition: 3, difficulty: 50 },
+      { keyword: "charcoal bbq/orange bbq", searchVolume: 6500, position: 12, targetPosition: 5, difficulty: 60 },
+      { keyword: "bbq grill", searchVolume: 5000, position: 9, targetPosition: 4, difficulty: 55 }
+    ]);
+    setCustomCTR({});
+    setProjections([]);
+    localStorage.removeItem('seoSettings');
   };
 
-  const resetNewKeywordForm = () => {
-    setNewKeyword("");
-    setNewVolume("");
-    setNewPosition("");
-    setNewTarget("");
-    setShowNewKeywordForm(false);
-  };
-
-  const updateKeyword = (index, field, value) => {
-    const updatedKeywords = [...keywords];
-    if (field === 'keyword') {
-      updatedKeywords[index][field] = value;
-    } else {
-      const numValue = parseInt(value) || 0;
-      if ((field === 'position' || field === 'targetPosition') && (numValue < 1 || numValue > 100)) return;
-      if (field === 'searchVolume' && numValue < 0) return;
-      updatedKeywords[index][field] = numValue;
-    }
-    setKeywords(updatedKeywords);
-  };
-
-  const removeKeyword = (index) => {
-    setKeywords(keywords.filter((_, i) => i !== index));
-  };
-
-  // CTR Model with consistent rounding using Math.ceil
-  const getCTR = (position) => {
-    const ctrTable = { 1: 0.317, 2: 0.247, 3: 0.187, 4: 0.133, 5: 0.095, 6: 0.068, 7: 0.049, 8: 0.035, 9: 0.025, 10: 0.018 };
-    const roundedPosition = Math.ceil(position); // Use Math.ceil for consistent rounding
-    return roundedPosition <= 10 ? ctrTable[roundedPosition] : 0.01;
-  };
-
-  // Seasonality Data for Categories
-  const getSeasonalityMultiplier = (month, category) => {
-    const seasonality = {
-      "BBQ & Outdoor Cooking": { 1: 0.8, 2: 0.9, 3: 1.0, 4: 1.1, 5: 1.2, 6: 1.3, 7: 1.3, 8: 1.2, 9: 1.1, 10: 1.0, 11: 0.9, 12: 0.8 },
-      "Christmas & Seasonal": { 1: 0.8, 2: 0.7, 3: 0.6, 4: 0.5, 5: 0.5, 6: 0.6, 7: 0.7, 8: 0.8, 9: 0.9, 10: 1.0, 11: 1.2, 12: 1.5 },
-      "Fashion & Apparel": { 1: 1.0, 2: 1.1, 3: 1.0, 4: 0.9, 5: 1.0, 6: 1.1, 7: 1.0, 8: 1.0, 9: 1.1, 10: 1.2, 11: 1.3, 12: 1.2 }
-    };
-    return seasonality[category]?.[month] || 1.0;
-  };
-
-  // Forecast Algorithm with Error Handling and Loading State
   const calculateForecast = () => {
     try {
-      setLoading(true); // Start loading
+      setLoading(true);
       const { conversionRate, projectionPeriod, averageOrderValue, investment } = settings;
-      console.log("Settings:", settings); // Debug log
-      console.log("Keywords:", keywords); // Debug log
-
       if (!projectionPeriod || projectionPeriod < 1 || projectionPeriod > 12) {
         setValidationError("Projection period must be between 1 and 12 months.");
         setLoading(false);
         return;
       }
 
-      const projections = [];
+      const ctrModel = settings.ctrModel === 'Custom' ? customCTR : CTR_MODELS[settings.ctrModel];
+      const projections: Projection[] = [];
       let totalTraffic = 0, totalConversions = 0, totalRevenue = 0;
 
       for (let month = 1; month <= projectionPeriod; month++) {
         let monthlyTraffic = 0, monthlyConversions = 0, monthlyRevenue = 0;
+        const keywordBreakdown: Array<{ keyword: string; traffic: number; conversions: number; revenue: number }> = [];
 
         keywords.forEach(keyword => {
-          const { searchVolume, position, targetPosition } = keyword;
+          const { searchVolume, position, targetPosition, difficulty } = keyword;
           if (!searchVolume || !position || !targetPosition) {
             throw new Error(`Invalid keyword data: ${JSON.stringify(keyword)}`);
           }
 
           const positionDelta = (position - targetPosition) / projectionPeriod;
-          const currentMonthPosition = Math.max(targetPosition, position - positionDelta * (month - 1));
-          const ctr = getCTR(currentMonthPosition);
+          const difficultyFactor = 1 - (difficulty / 100); // Higher difficulty slows improvement
+          const adjustedDelta = positionDelta * difficultyFactor;
+          const currentMonthPosition = Math.max(targetPosition, position - adjustedDelta * (month - 1));
+          const ctr = getCTR(currentMonthPosition, ctrModel);
           const seasonality = getSeasonalityMultiplier(month, settings.category);
           const traffic = searchVolume * ctr * seasonality;
           const conversions = traffic * (conversionRate / 100);
@@ -225,33 +223,47 @@ function UpdatedSEOTool() {
           monthlyTraffic += traffic;
           monthlyConversions += conversions;
           monthlyRevenue += revenue;
+
+          keywordBreakdown.push({
+            keyword: keyword.keyword,
+            traffic,
+            conversions,
+            revenue
+          });
         });
 
         totalTraffic += monthlyTraffic;
         totalConversions += monthlyConversions;
         totalRevenue += monthlyRevenue;
 
+        // Add confidence intervals (±10%)
+        const trafficRange: [number, number] = [Math.round(monthlyTraffic * 0.9), Math.round(monthlyTraffic * 1.1)];
+        const conversionsRange: [number, number] = [Math.round(monthlyConversions * 0.9), Math.round(monthlyConversions * 1.1)];
+        const revenueRange: [number, number] = [parseFloat((monthlyRevenue * 0.9).toFixed(2)), parseFloat((monthlyRevenue * 1.1).toFixed(2))];
+
         projections.push({
           month: new Date(2025, month - 1).toLocaleString('default', { month: 'short' }),
           traffic: Math.round(monthlyTraffic),
           conversions: Math.round(monthlyConversions),
           revenue: monthlyRevenue.toFixed(2),
-          roi: (((totalRevenue - investment) / investment) * 100).toFixed(1)
+          roi: (((totalRevenue - investment) / investment) * 100).toFixed(1),
+          trafficRange,
+          conversionsRange,
+          revenueRange,
+          keywordBreakdown
         });
       }
 
-      console.log("Projections:", projections); // Debug log
       setProjections(projections);
       setValidationError("");
     } catch (error) {
       console.error("Error in calculateForecast:", error);
       setValidationError("An error occurred while calculating the forecast. Check the console for details.");
     } finally {
-      setLoading(false); // End loading
+      setLoading(false);
     }
   };
 
-  // Export Projections as CSV
   const downloadProjectionsCSV = () => {
     const headers = "Month,Traffic,Conversions,Revenue,ROI\n";
     const rows = projections.map(p => `${p.month},${p.traffic},${p.conversions},${p.revenue},${p.roi}`).join('\n');
@@ -265,7 +277,57 @@ function UpdatedSEOTool() {
     URL.revokeObjectURL(url);
   };
 
-  // Chart Data
+  const printForecast = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>SEO Forecast</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 20px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+              th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+              th { background-color: #f2f2f2; text-align: left; }
+              h2 { text-align: center; }
+              .break-even { background-color: #e6ffe6; padding: 10px; border-radius: 5px; }
+            </style>
+          </head>
+          <body>
+            <h2>SEO Forecast</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Traffic (±10%)</th>
+                  <th>Conversions (±10%)</th>
+                  <th>Revenue (${settings.currency.split(' ')[1]}) (±10%)</th>
+                  <th>ROI</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${projections.map(proj => `
+                  <tr>
+                    <td>${proj.month}</td>
+                    <td>${proj.traffic} (${proj.trafficRange[0]} - ${proj.trafficRange[1]})</td>
+                    <td>${proj.conversions} (${proj.conversionsRange[0]} - ${proj.conversionsRange[1]})</td>
+                    <td>${proj.revenue} (${proj.revenueRange[0]} - ${proj.revenueRange[1]})</td>
+                    <td>${proj.roi}%</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            <div class="break-even">
+              <strong>Break-Even Analysis:</strong> You will recover your ${settings.currency.split(' ')[1]}${settings.investment} investment by ${projections.find(proj => parseFloat(proj.revenue) >= settings.investment)?.month || 'N/A'}.
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
+
   const chartData = {
     labels: projections.map(p => p.month),
     datasets: [
@@ -313,103 +375,59 @@ function UpdatedSEOTool() {
             <li>searchVolume (required, positive number)</li>
             <li>position (optional, 1-100)</li>
             <li>targetPosition (optional, 1-100)</li>
+            <li>difficulty (optional, 1-100)</li>
           </ul>
-          <p className="mt-1 text-sm">Example: "gas bbq",8000,8,3</p>
+          <p className="mt-1 text-sm">Example: "gas bbq",8000,8,3,50</p>
         </div>
       </div>
 
       {/* Settings */}
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold mb-2">Settings</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm mb-1">Category</label>
-            <select className="w-full border p-2 rounded" value={settings.category} onChange={(e) => setSettings({ ...settings, category: e.target.value })}>
-              <option>BBQ & Outdoor Cooking</option>
-              <option>Christmas & Seasonal</option>
-              <option>Fashion & Apparel</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Projection Period (Months)</label>
-            <input type="number" min="1" max="12" className="w-full border p-2 rounded" value={settings.projectionPeriod} onChange={(e) => setSettings({ ...settings, projectionPeriod: parseInt(e.target.value) || 6 })} />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Currency</label>
-            <select className="w-full border p-2 rounded" value={settings.currency} onChange={(e) => setSettings({ ...settings, currency: e.target.value })}>
-              <option>GBP (£)</option>
-              <option>USD ($)</option>
-              <option>EUR (€)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Conversion Rate (%)</label>
-            <input type="number" min="0" max="100" className="w-full border p-2 rounded" value={settings.conversionRate} onChange={(e) => setSettings({ ...settings, conversionRate: parseFloat(e.target.value) || 3.0 })} />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Average Order Value</label>
-            <input type="number" min="0" className="w-full border p-2 rounded" value={settings.averageOrderValue} onChange={(e) => setSettings({ ...settings, averageOrderValue: parseInt(e.target.value) || 250 })} />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">SEO Investment</label>
-            <input type="number" min="0" className="w-full border p-2 rounded" value={settings.investment} onChange={(e) => setSettings({ ...settings, investment: parseInt(e.target.value) || 5000 })} />
+      <SettingsForm settings={settings} setSettings={setSettings} />
+
+      {/* Custom CTR Table */}
+      {settings.ctrModel === 'Custom' && (
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold mb-2">Custom CTR Table</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map(pos => (
+              <div key={pos}>
+                <label className="block text-sm mb-1">Position {pos} (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className="w-full border p-2 rounded"
+                  value={customCTR[pos] || 0}
+                  onChange={(e) => setCustomCTR({ ...customCTR, [pos]: parseFloat(e.target.value) / 100 || 0 })}
+                />
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Keywords */}
-      <div className="mb-4">
-        <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold">Keywords</h2>
-          <button onClick={() => setShowNewKeywordForm(true)} className="bg-blue-600 text-white py-1 px-3 rounded text-sm hover:bg-blue-700">
-            + Add Keyword
-          </button>
-        </div>
-        {validationError && <div className="mb-2 p-2 bg-red-50 rounded text-red-700">{validationError}</div>}
-        {showNewKeywordForm && (
-          <div className="bg-gray-50 p-4 rounded mb-4">
-            <h3 className="font-medium mb-3">Add New Keyword</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div><label className="block text-sm mb-1">Keyword</label><input type="text" className="w-full border p-2 rounded" value={newKeyword} onChange={(e) => setNewKeyword(e.target.value)} /></div>
-              <div><label className="block text-sm mb-1">Search Volume</label><input type="number" min="1" className="w-full border p-2 rounded" value={newVolume} onChange={(e) => setNewVolume(e.target.value)} /></div>
-              <div><label className="block text-sm mb-1">Current Position</label><input type="number" min="1" max="100" className="w-full border p-2 rounded" value={newPosition} onChange={(e) => setNewPosition(e.target.value)} /></div>
-              <div><label className="block text-sm mb-1">Target Position</label><input type="number" min="1" max="100" className="w-full border p-2 rounded" value={newTarget} onChange={(e) => setNewTarget(e.target.value)} /></div>
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button onClick={resetNewKeywordForm} className="bg-gray-400 text-white py-1 px-3 rounded mr-2 hover:bg-gray-500">Cancel</button>
-              <button onClick={addKeyword} className="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700">Add Keyword</button>
-            </div>
-          </div>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full border">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="p-2 border text-left">Keyword</th>
-                <th className="p-2 border text-right">Search Volume</th>
-                <th className="p-2 border text-center">Current Position</th>
-                <th className="p-2 border text-center">Target Position</th>
-                <th className="p-2 border text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {keywords.map((keyword, index) => (
-                <tr key={index}>
-                  <td className="p-2 border"><input type="text" className="w-full border p-1 rounded" value={keyword.keyword} onChange={(e) => updateKeyword(index, 'keyword', e.target.value)} /></td>
-                  <td className="p-2 border"><input type="number" min="0" className="w-full border p-1 rounded text-right" value={keyword.searchVolume} onChange={(e) => updateKeyword(index, 'searchVolume', e.target.value)} /></td>
-                  <td className="p-2 border"><input type="number" min="1" max="100" className="w-20 border p-1 rounded text-center mx-auto block" value={keyword.position} onChange={(e) => updateKeyword(index, 'position', e.target.value)} /></td>
-                  <td className="p-2 border"><input type="number" min="1" max="100" className="w-20 border p-1 rounded text-center mx-auto block" value={keyword.targetPosition} onChange={(e) => updateKeyword(index, 'targetPosition', e.target.value)} /></td>
-                  <td className="p-2 border text-center"><button onClick={() => removeKeyword(index)} className="bg-red-500 hover:bg-red-600 text-white py-1 px-2 rounded text-xs">Remove</button></td>
-                </tr>
-              ))}
-              {keywords.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-500">No keywords added.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <KeywordsTable
+        keywords={keywords}
+        setKeywords={setKeywords}
+        showNewKeywordForm={showNewKeywordForm}
+        setShowNewKeywordForm={setShowNewKeywordForm}
+        newKeyword={newKeyword}
+        setNewKeyword={setNewKeyword}
+        newVolume={newVolume}
+        setNewVolume={setNewVolume}
+        newPosition={newPosition}
+        setNewPosition={setNewPosition}
+        newTarget={newTarget}
+        setNewTarget={setNewTarget}
+        newDifficulty={newDifficulty}
+        setNewDifficulty={setNewDifficulty}
+        validationError={validationError}
+        setValidationError={setValidationError}
+      />
 
-      {/* Calculate Forecast */}
-      <div className="mb-4">
+      {/* Calculate Forecast and Reset */}
+      <div className="mb-4 flex space-x-4">
         <button
           onClick={calculateForecast}
           className="bg-green-600 text-white py-2 px-4 rounded font-medium hover:bg-green-700 disabled:opacity-50"
@@ -417,56 +435,46 @@ function UpdatedSEOTool() {
         >
           {loading ? "Calculating..." : "Calculate Forecast"}
         </button>
+        <button
+          onClick={resetToDefaults}
+          className="bg-gray-600 text-white py-2 px-4 rounded font-medium hover:bg-gray-700"
+        >
+          Reset to Defaults
+        </button>
       </div>
 
       {/* Projections */}
       {projections.length > 0 && (
         <>
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2">Monthly Projections</h2>
-            <table className="w-full border">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="p-2 border text-left">Month</th>
-                  <th className="p-2 border text-right">Traffic</th>
-                  <th className="p-2 border text-right">Conversions</th>
-                  <th className="p-2 border text-right">Revenue ({settings.currency.split(' ')[1]})</th>
-                  <th className="p-2 border text-right">ROI</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projections.map((proj, index) => (
-                  <tr key={index}>
-                    <td className="p-2 border">{proj.month}</td>
-                    <td className="p-2 border text-right">{proj.traffic}</td>
-                    <td className="p-2 border text-right">{proj.conversions}</td>
-                    <td className="p-2 border text-right">{proj.revenue}</td>
-                    <td className="p-2 border text-right">{proj.roi}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ProjectionsTable projections={projections} settings={settings} />
 
           {/* Visualization */}
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2">Traffic & Revenue Trends</h2>
             <Line data={chartData} options={{ responsive: true, scales: { y: { beginAtZero: true } } }} />
           </div>
+
+          {/* What-If Analysis */}
+          <WhatIfAnalysis keywords={keywords} settings={settings} customCTR={customCTR} />
         </>
       )}
 
-      {/* Export Buttons */}
-      <div className="flex justify-end mt-4">
-        <button className="bg-blue-600 text-white py-2 px-4 rounded font-medium mr-2 hover:bg-blue-700" onClick={downloadProjectionsCSV}>
+      {/* Export and Print Buttons */}
+      <div className="flex justify-end mt-4 space-x-4">
+        <button className="bg-blue-600 text-white py-2 px-4 rounded font-medium hover:bg-blue-700" onClick={downloadProjectionsCSV}>
           Export Results
         </button>
+        {projections.length > 0 && (
+          <button className="bg-purple-600 text-white py-2 px-4 rounded font-medium hover:bg-purple-700" onClick={printForecast}>
+            Print Forecast
+          </button>
+        )}
         <button className="bg-gray-600 text-white py-2 px-4 rounded font-medium hover:bg-gray-700" onClick={downloadProjectionsCSV}>
           Download CSV
         </button>
       </div>
     </div>
   );
-}
+};
 
 export default UpdatedSEOTool;
